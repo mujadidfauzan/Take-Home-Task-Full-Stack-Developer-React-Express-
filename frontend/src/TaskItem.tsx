@@ -35,7 +35,7 @@ export function TaskItem({ task, actor, statuses, onChange, onDelete }: Props) {
       .catch((err: Error) => { if (!cancelled) setLogError(err.message); })
       .finally(() => { if (!cancelled) setLoadingLogs(false); });
     return () => { cancelled = true; };
-  }, [expanded, task.id, task.updatedAt, reload]);
+  }, [expanded, task.id, task.version, task.updatedAt, reload]);
 
   async function advance() {
     if (!nextStatus || busy) return;

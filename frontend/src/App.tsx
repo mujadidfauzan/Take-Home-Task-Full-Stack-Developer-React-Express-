@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ClipboardList, LoaderCircle, Plus, RefreshCw, X } from 'lucide-react';
 import { api } from './api';
 import { TaskItem } from './TaskItem';
+import { useRealtime } from './useRealtime';
 import { STATUS_LABELS, type Metadata, type Task } from './types';
 
 export function App() {
@@ -17,6 +18,7 @@ export function App() {
   const [creating, setCreating] = useState(false);
   const [reload, setReload] = useState(0);
   const titleInput = useRef<HTMLInputElement>(null);
+  const realtime = useRealtime();
 
   useEffect(() => {
     let cancelled = false;
@@ -34,6 +36,15 @@ export function App() {
     return () => { cancelled = true; };
   }, [deleted, reload]);
 
+  useEffect(() => {
+    if (loading || !metadata.statuses.length) return;
+    let cancelled = false;
+    api.tasks(deleted)
+      .then(({ tasks: latest }) => { if (!cancelled) setTasks(latest); })
+      .catch((err: Error) => { if (!cancelled) setError(err.message); });
+    return () => { cancelled = true; };
+  }, [realtime.revision, deleted, loading, metadata.statuses.length]);
+
   async function createTask(event: FormEvent) {
     event.preventDefault();
     if (!title.trim() || creating) return;
@@ -41,7 +52,7 @@ export function App() {
     setError('');
     try {
       const { task } = await api.create(title, description);
-      setTasks((current) => [task, ...current]);
+      setTasks((current) => [task, ...current.filter((item) => item.id !== task.id)]);
       setTitle('');
       setDescription('');
       setNotice('Task berhasil dibuat.');
@@ -59,7 +70,7 @@ export function App() {
     <>
       <header className="app-header"><div className="header-inner">
         <div className="brand"><ClipboardList size={24} /><span>Mini Task Manager</span></div>
-        <span className="workspace-label">Internal workspace</span>
+        <span className="connection-state" role="status"><i className={realtime.connected ? 'online' : ''} />{realtime.connected ? 'Terhubung' : 'Menghubungkan...'}</span>
       </div></header>
       <main>
         <div className="page-heading"><div><p className="eyebrow">TEAM WORKSPACE</p><h1>Tasks</h1></div>
@@ -90,7 +101,7 @@ export function App() {
           {!deleted && !loading && <div className="status-summary">{metadata.statuses.map((status) => <span key={status}><i className={`dot dot-${status}`} />{STATUS_LABELS[status]}<strong>{tasks.filter((task) => task.status === status).length}</strong></span>)}</div>}
           {loading ? <div className="empty-state" role="status"><LoaderCircle size={26} className="spin" /><p>Memuat task...</p></div> : tasks.length === 0 ? <div className="empty-state"><ClipboardList size={32} /><h2>{error ? 'Task belum dapat dimuat' : deleted ? 'Tidak ada task terhapus' : 'Belum ada task'}</h2></div> : <div className="task-list">
             {tasks.map((task) => <TaskItem key={task.id} task={task} actor={actor} statuses={metadata.statuses}
-              onChange={(updated) => { setTasks((current) => current.map((item) => item.id === updated.id ? updated : item)); setNotice(`Status "${updated.title}" menjadi ${STATUS_LABELS[updated.status]}.`); }}
+              onChange={(updated) => { setTasks((current) => current.map((item) => item.id === updated.id && item.version <= updated.version ? updated : item)); setNotice(`Status "${updated.title}" menjadi ${STATUS_LABELS[updated.status]}.`); }}
               onDelete={(id) => { setTasks((current) => current.filter((item) => item.id !== id)); setNotice('Task berhasil dihapus.'); }} />)}
           </div>}
         </section>

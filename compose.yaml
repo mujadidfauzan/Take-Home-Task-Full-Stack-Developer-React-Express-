@@ -1,0 +1,99 @@
+name: mini-task-manager
+
+services:
+  mongo-key:
+    image: mongo:8.0
+    entrypoint: ["bash", "-c"]
+    command:
+      - "if [ ! -s /keys/keyfile ]; then openssl rand -base64 756 > /keys/keyfile; fi; chown mongodb:mongodb /keys/keyfile; chmod 400 /keys/keyfile"
+    volumes:
+      - mongo-key:/keys
+
+  mongo:
+    image: mongo:8.0
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/keys/keyfile"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ADMIN_USER:-mini_admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ADMIN_PASSWORD:-dev_admin_password}
+    ports:
+      - "127.0.0.1:${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+      - mongo-key:/keys:ro
+    depends_on:
+      mongo-key:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "const c = new Mongo('mongodb://' + encodeURIComponent(process.env.MONGO_INITDB_ROOT_USERNAME) + ':' + encodeURIComponent(process.env.MONGO_INITDB_ROOT_PASSWORD) + '@127.0.0.1:27017/admin?directConnection=true'); quit(c.getDB('admin').runCommand({ping:1}).ok ? 0 : 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  mongo-init:
+    image: mongo:8.0
+    entrypoint: ["mongosh", "--nodb", "--quiet", "/scripts/init-mongo.js"]
+    environment:
+      MONGO_ADMIN_USER: ${MONGO_ADMIN_USER:-mini_admin}
+      MONGO_ADMIN_PASSWORD: ${MONGO_ADMIN_PASSWORD:-dev_admin_password}
+    volumes:
+      - ./infra/init-mongo.js:/scripts/init-mongo.js:ro
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  db-setup:
+    image: mini-task-manager:local
+    build: .
+    command: ["node", "backend/dist/setup-database.js"]
+    environment:
+      MONGO_HOST: mongo:27017
+      MONGO_ADMIN_USER: ${MONGO_ADMIN_USER:-mini_admin}
+      MONGO_ADMIN_PASSWORD: ${MONGO_ADMIN_PASSWORD:-dev_admin_password}
+      MONGO_DB_NAME: ${MONGO_DB_NAME:-mini_tasks}
+      MONGO_APP_USER: ${MONGO_APP_USER:-mini_app}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:-dev_app_password}
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+
+  app:
+    image: mini-task-manager:local
+    pull_policy: never
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      MONGO_DB_NAME: ${MONGO_DB_NAME:-mini_tasks}
+      MONGO_HOST: mongo:27017
+      MONGO_APP_USER: ${MONGO_APP_USER:-mini_app}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:-dev_app_password}
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+    depends_on:
+      db-setup:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
+  mongo-key:

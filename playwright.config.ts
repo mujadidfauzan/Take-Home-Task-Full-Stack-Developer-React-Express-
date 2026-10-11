@@ -10,7 +10,7 @@ export default defineConfig({
     { name: 'mobile', use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium' } }
   ],
   webServer: [
-    { command: 'npm run dev -w backend', url: 'http://127.0.0.1:4100/api/health', env: { PORT: '4100', DB_PATH: ':memory:' }, reuseExistingServer: false },
+    { command: 'npm run e2e:server -w backend', url: 'http://127.0.0.1:4100/api/health', env: { PORT: '4100', MONGO_DB_NAME: 'mini_tasks_e2e', MONGODB_URI: 'mongodb://mini_app:dev_app_password@127.0.0.1:27017/mini_tasks_e2e?authSource=mini_tasks_e2e&replicaSet=rs0&directConnection=true' }, reuseExistingServer: false },
     { command: 'npm run dev -w frontend -- --host 127.0.0.1 --port 5174 --strictPort', url: 'http://127.0.0.1:5174', env: { API_TARGET: 'http://127.0.0.1:4100' }, reuseExistingServer: false }
   ]
 });

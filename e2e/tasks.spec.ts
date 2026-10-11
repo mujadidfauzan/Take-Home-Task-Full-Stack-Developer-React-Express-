@@ -75,3 +75,32 @@ test('shows a loading error and recovers after retry without losing form input',
   await expect(page.getByRole('button', { name: 'Tambah task' })).toBeEnabled();
   await expect(page.getByLabel('Judul', { exact: true })).toHaveValue('Retry task');
 });
+
+test('two browser clients receive create, status, audit, and deletion changes in realtime', async ({ page, context }, testInfo) => {
+  const second = await context.newPage();
+  const title = `Realtime task ${testInfo.project.name}`;
+  await page.goto('/');
+  await second.goto('/');
+  await expect(page.getByText('Terhubung', { exact: true })).toBeVisible();
+  await expect(second.getByText('Terhubung', { exact: true })).toBeVisible();
+  await page.getByLabel('Judul', { exact: true }).fill(title);
+  await page.getByRole('button', { name: 'Tambah task' }).click();
+  const local = page.getByRole('article', { name: title, exact: true });
+  const remote = second.getByRole('article', { name: title, exact: true });
+  await expect(remote).toBeVisible({ timeout: 5000 });
+  await remote.getByRole('button', { name: 'Lihat riwayat' }).click();
+  await expect(remote.getByText('Belum ada perubahan status.')).toBeVisible();
+  await page.getByLabel('Actor', { exact: true }).selectOption('alex.chen');
+  await local.getByRole('button', { name: 'Pending', exact: true }).click();
+  await expect(remote.getByRole('button', { name: 'In progress', exact: true })).toBeVisible({ timeout: 5000 });
+  await expect(remote.locator('.audit-list li')).toHaveCount(1);
+  await expect(remote.locator('.audit-list li')).toContainText('alex.chen');
+  await local.getByRole('button', { name: `Hapus ${title}`, exact: true }).click();
+  await local.getByRole('button', { name: 'Hapus', exact: true }).click();
+  await expect(remote).toHaveCount(0, { timeout: 5000 });
+  await second.getByRole('tab', { name: 'Terhapus' }).click();
+  await expect(remote).toBeVisible();
+  await remote.getByRole('button', { name: 'Lihat riwayat' }).click();
+  await expect(remote.locator('.audit-list li')).toHaveCount(1);
+  await second.close();
+});

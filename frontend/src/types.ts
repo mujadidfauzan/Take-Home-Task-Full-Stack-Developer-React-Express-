@@ -7,6 +7,7 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  version: number;
 }
 export interface AuditLog {
   sequence: number;

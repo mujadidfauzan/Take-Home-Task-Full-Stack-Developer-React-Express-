@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "workspaces": ["backend", "frontend"],
-  "engines": { "node": ">=22.12.0" },
+  "engines": { "node": ">=22.13.0" },
   "scripts": {
     "dev": "concurrently -k -n api,web \"npm run dev -w backend\" \"npm run dev -w frontend\"",
     "build": "npm run build -w backend && npm run build -w frontend",
     "test": "npm run test -w backend",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "infra:up": "docker compose up -d --build mongo redis mongo-init db-setup",
+    "infra:down": "docker compose down",
+    "docker:up": "docker compose up -d --build",
+    "deploy:gcp": "bash scripts/deploy-gcp.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
